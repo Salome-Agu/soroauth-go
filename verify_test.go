@@ -107,18 +107,34 @@ func TestVerifyEntryGoldenVectors(t *testing.T) {
 				if wantVerified[node.Address] {
 					want = VerdictVerified
 				}
+				// A node addressed to a contract is always cannot_check,
+				// whatever it holds: only that contract's __check_auth defines
+				// whether its signature is valid, and verify.go decides this
+				// before the unsigned check. Vectors covering contract
+				// delegates (#307) are the first to exercise it.
+				if strings.HasPrefix(node.Address, "C") {
+					want = VerdictCannotCheck
+				}
 				if node.Verdict != want {
 					t.Errorf("node %d (%s) verdict %q (%s), want %q",
 						i, node.Address, node.Verdict, node.Reason, want)
 				}
 			}
 
-			// The report must never call a golden vector invalid or
-			// cannot-check: every vector's nodes are classic account signatures.
+			// The report must never call a golden vector's node invalid.
+			// cannot_check is allowed only for a contract node, where it is the
+			// correct answer rather than a gap: this assertion used to forbid it
+			// outright because every vector's nodes were classic account
+			// signatures, which stopped being true once contract delegates were
+			// covered (#307). A G… node must still never be cannot_check.
 			for i, node := range report.Nodes {
-				if node.Verdict == VerdictInvalid || node.Verdict == VerdictCannotCheck {
-					t.Errorf("node %d (%s) verdict %q (%s); a golden vector must never be %q or %q",
-						i, node.Address, node.Verdict, node.Reason, VerdictInvalid, VerdictCannotCheck)
+				if node.Verdict == VerdictInvalid {
+					t.Errorf("node %d (%s) verdict %q (%s); a golden vector must never be %q",
+						i, node.Address, node.Verdict, node.Reason, VerdictInvalid)
+				}
+				if node.Verdict == VerdictCannotCheck && !strings.HasPrefix(node.Address, "C") {
+					t.Errorf("node %d (%s) verdict %q (%s); only a contract node may be %q",
+						i, node.Address, node.Verdict, node.Reason, VerdictCannotCheck)
 				}
 			}
 
